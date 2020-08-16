@@ -3,32 +3,47 @@
 # Based on
 # https://github.com/openssl/openssl/blob/master/demos/certs/mkcerts.sh
 
-# Root CA: create certificate directly
-openssl req -config openssl-ca.cnf -x509 -nodes \
-    -keyout root.pem -out root.pem -newkey rsa:2048 -days 3650
-
-# Intermediate CA: request first
-openssl req -config openssl-ca.cnf -nodes \
-    -keyout intkey.pem -out intreq.pem -newkey rsa:2048
-
-# Sign request: CA extensions
-openssl x509 -req -in intreq.pem -CA root.pem -days 3600 \
-    -extfile openssl-ca.cnf -extensions ca_extensions -CAcreateserial -out intca.pem
+export CURVE=secp256k1
 
 
-# Server certificate: create request first
-openssl req -config openssl-ca.cnf -nodes \
-    -keyout skey.pem -out req.pem -newkey rsa:1024
+# Root CA: generate EC private key
+openssl ecparam -genkey -name $CURVE -noout -out root-key.pem
 
-# Sign request: end entity extensions
-openssl x509 -req -in req.pem -CA intca.pem -CAkey intkey.pem -days 3600 \
-    -extfile openssl-ca.cnf -extensions usr_cert -CAcreateserial -out server.pem
+# Root CA: create self-signed certificate from private key
+openssl req -x509 -config openssl-ca.cnf \
+    -key root-key.pem -out root-cert.pem -days 3650
 
 
-openssl ecparam -genkey -name secp256k1 -noout -out secp256k1-key.pem
 
-openssl req -config openssl-ca.cnf -new \
-    -key secp256k1-key.pem -out ecdh-req.pem
+# Intermediate CA: generate EC private key
+openssl ecparam -genkey -name $CURVE -noout -out int-key.pem
 
-openssl x509 -req -in ecdh-req.pem -CAkey intkey.pem -CA intca.pem -days 3600 \
-    -extfile openssl-ca.cnf -extensions dh_cert -CAcreateserial -out ecdhserver.pem
+# Intermediate CA: create CSR from private key
+openssl req -new -config openssl-ca.cnf -key int-key.pem -out int-req.pem
+
+# Intermediate CA: sign CSR with CA extensions
+openssl x509 -req -in int-req.pem -CAkey root-key.pem -CA root-cert.pem -days 3650 \
+    -extfile openssl-ca.cnf -extensions ca_extensions -CAcreateserial -out int-cert.pem
+
+# Intermediate CA: delete CSR
+rm int-req.pem
+
+
+
+# Make full chain from root and intermediate CA certs
+cat root-cert.pem int-cert.pem > fullchain.pem
+
+
+
+# Server: generate EC private key
+openssl ecparam -genkey -name $CURVE -noout -out server-key.pem
+
+# Server: create CSR from private key
+openssl req -new -config openssl-ca.cnf -key server-key.pem -out server-req.pem
+
+# Server: sign CSR with DH extensions
+openssl x509 -req -in server-req.pem -CAkey int-key.pem -CA int-cert.pem -days 3600 \
+    -extfile openssl-ca.cnf -extensions dh_cert -CAcreateserial -out server-cert.pem
+
+# Server: delete CSR
+rm server-req.pem
