@@ -10,7 +10,7 @@ export CURVE=secp256k1
 openssl ecparam -genkey -name $CURVE -noout -out root-key.pem
 
 # Root CA: create self-signed certificate from private key
-CN="Root CA" openssl req -x509 -config openssl-ca.cnf -days 3650 \
+CN="Root CA" openssl req -x509 -config ca.cnf -days 3650 \
     -key root-key.pem -out root-cert.pem
 
 
@@ -19,13 +19,13 @@ CN="Root CA" openssl req -x509 -config openssl-ca.cnf -days 3650 \
 openssl ecparam -genkey -name $CURVE -noout -out int-key.pem
 
 # Intermediate CA: create CSR from private key
-CN="Intermediate CA" openssl req -new -config openssl-ca.cnf \
+CN="Intermediate CA" openssl req -new -config ca.cnf \
     -key int-key.pem -out int-req.pem
 
 # Intermediate CA: sign CSR with CA extensions
 openssl x509 -req -in int-req.pem -days 3650 \
     -CAkey root-key.pem -CA root-cert.pem -CAcreateserial \
-    -extfile openssl-ca.cnf -extensions ca_extensions \
+    -extfile ca.cnf -extensions ca_extensions \
     -out int-cert.pem
 
 # Intermediate CA: delete CSR
@@ -42,13 +42,13 @@ cat root-cert.pem int-cert.pem > fullchain.pem
 openssl ecparam -genkey -name $CURVE -noout -out server-key.pem
 
 # Server: create CSR from private key
-CN="ECDH Cert" openssl req -new -config openssl-ca.cnf \
+CN="ECDH Cert" openssl req -new -config ca.cnf \
     -key server-key.pem -out server-req.pem
 
 # Server: sign CSR with DH extensions
 openssl x509 -req -in server-req.pem -days 3600 \
     -CAkey int-key.pem -CA int-cert.pem -CAcreateserial \
-    -extfile openssl-ca.cnf -extensions dh_cert \
+    -extfile ca.cnf -extensions dh_cert \
     -out server-cert.pem
 
 # Server: delete CSR
